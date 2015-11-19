@@ -1,6 +1,9 @@
 /*
   CarPal! Your automobile's OBD2 dashboard buddy. 
 
+  v4 - moved checkSMS to it's own tab for expanding sms command parsing, added the logging bool switches that can be turned
+       on/off via sms - how to delete a json item when logging has been turned off, instead of just repeating the last value logged?
+       also next: add sdcard support and how to get accurate timestamps from cell service
   v3c - changing all of adafruit url to snprintf
   v3b - got rid of 'String' objects in adafruit section and moved sms vars into it's function instead of globals
   v3a - added more detailed MIL code bit results testing
