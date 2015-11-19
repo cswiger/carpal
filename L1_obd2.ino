@@ -113,10 +113,23 @@ void setup()
 
 int interval = 15000;  // millis per sample
 int last = 0;          // start
-int myspeed = 0;
-int myrpm = 0;
-long coolantTemp = 0;
-long myload = 0;
+
+// these have their own function in obd2 library
+int vehicle_speed = 0;
+int engine_rpm = 0;
+// everything else is return long
+long fuel_status = 0;
+long engine_load = 0;
+long coolant_temp = 0;
+long stft_b1 = 0;
+long ltft_b1 = 0;
+long stft_b2 = 0;
+long ltft_b2 = 0;
+long timing_adv = 0;
+long int_air_temp = 0;
+long maf_air_flow = 0;
+long throttle_pos = 0;
+long b1s2_o2_v = 0;
 
 
 void loop()
@@ -126,10 +139,20 @@ void loop()
     //Refresh Vehicle status, should be called in every loop
     obd2.Refresh();
     if(obd2.isIgnitionOn){
-      myspeed = obd2.Speed();
-      myrpm = obd2.RPM();
-      obd2.get_pid(COOLANT_TEMP,&coolantTemp);
-      obd2.get_pid(LOAD_VALUE,&myload);
+      if (log_speed) vehicle_speed = obd2.Speed();
+      if (log_rpm) engine_rpm = obd2.RPM();
+      if (log_fuel) obd2.get_pid(FUEL_STATUS,&fuel_status);
+      if (log_load) obd2.get_pid(LOAD_VALUE,&engine_load);
+      if (log_coolant) obd2.get_pid(COOLANT_TEMP,&coolant_temp); 
+      if (log_stft_b1) obd2.get_pid(STFT_BANK1,&stft_b1);
+      if (log_ltft_b1) obd2.get_pid(LTFT_BANK1,&ltft_b1);
+      if (log_stft_b2) obd2.get_pid(STFT_BANK2,&stft_b2);
+      if (log_ltft_b2) obd2.get_pid(LTFT_BANK2,&ltft_b2);
+      if (log_timing_adv) obd2.get_pid(TIMING_ADV,&timing_adv);
+      if (log_int_air_temp) obd2.get_pid(INT_AIR_TEMP,&int_air_temp);
+      if (log_maf_air_flow) obd2.get_pid(MAF_AIR_FLOW,&maf_air_flow);
+      if (log_throttle_pos) obd2.get_pid(THROTTLE_POS,&throttle_pos);
+      if (log_b1s2_o2_v) obd2.get_pid(B1S2_O2_V,&b1s2_o2_v);
       obdError = false;
     } else {
       obdError = true;
@@ -140,11 +163,25 @@ void loop()
     parseGPGGA((const char*)info.GPGGA);
     
     Serial.println("Updating json");      // for Pubnub EON Mapbox map
-    latlng.set(0,double_with_n_digits(convertDegMinToDecDeg(latitude),6));      // get 6 digits precision!
-    latlng.set(1,double_with_n_digits(convertDegMinToDecDeg(longitude),6));
-    root["speed"] = myspeed;
-    root["rpm"] = myrpm;
-    root["coolantTemp"] = coolantTemp;
+    if(log_location)
+    {
+      latlng.set(0,double_with_n_digits(convertDegMinToDecDeg(latitude),6));      // get 6 digits precision!
+      latlng.set(1,double_with_n_digits(convertDegMinToDecDeg(longitude),6));
+    }
+    if (log_speed) root["speed"] = vehicle_speed;
+    if (log_rpm) root["rpm"] = engine_rpm;
+    if (log_fuel) root["fuel"] = fuel_status;
+    if (log_load) root["load"] = engine_load;
+    if (log_coolant) root["coolant"] = coolant_temp;
+    if (log_stft_b1) root["stftb1"] = stft_b1;
+    if (log_ltft_b1) root["ltftb1"] = ltft_b1;
+    if (log_stft_b2) root["stftb2"] = stft_b2;
+    if (log_ltft_b2) root["ltftb2"] = ltft_b2;
+    if (log_timing_adv) root["timing"] = timing_adv;
+    if (log_int_air_temp) root["intairtemp"] = int_air_temp;
+    if (log_maf_air_flow) root["mafairflow"] = maf_air_flow;
+    if (log_throttle_pos) root["throttlepos"] = throttle_pos;
+    if (log_b1s2_o2_v) root["b1s2o2v"] = b1s2_o2_v;
     root.printTo(buff,80);
    
     strcpy(pub,leftbr);  // reset target string, put square brackets around json {...} so we have [{...}], EON wants a LIST
@@ -172,7 +209,7 @@ void loop()
     {
       Serial.println("connected");
       // Make a HTTP request:
-      snprintf(buff,255,"GET %s%li&CoolantTemp=%li&Location=%.6f,%.6f HTTP/1.1",path,myload,coolantTemp,convertDegMinToDecDeg(latitude),convertDegMinToDecDeg(longitude));
+      snprintf(buff,255,"GET %s%li&CoolantTemp=%li&Location=%.6f,%.6f HTTP/1.1",path,engine_load,coolant_temp,convertDegMinToDecDeg(latitude),convertDegMinToDecDeg(longitude));
       client->println(buff);
       client->print("Host: ");
       client->println(server);
