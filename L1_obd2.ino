@@ -1,6 +1,8 @@
 /*
   CarPal! Your automobile's OBD2 dashboard buddy. 
 
+  v5a - cleanup and debug sms logging commands
+  v5 - moved gps functions to it's own tab, added sd card support
   v4 - moved checkSMS to it's own tab for expanding sms command parsing, added the logging bool switches that can be turned
        on/off via sms - how to delete a json item when logging has been turned off, instead of just repeating the last value logged?
        also next: add sdcard support and how to get accurate timestamps from cell service
@@ -23,12 +25,15 @@
 
 // Adafruit io support
 char server[] =  "io.adafruit.com";
-char path[] = "/api/groups/AutoStats/send.json?x-aio-key=xxxxyourxadafruitxaioxkeyxherexxxxxxxxxx&Load=";
+char path[] = "/api/groups/AutoStats/send.json?x-aio-key=a0c04c4efd0c605e93ef1e2ed2be85de1095f140&Load=";
 int port = 80; // HTTP
 
 //import all the necessary files for GPRS connectivity
 #include "LGPRS.h"
 #include "LGPRSClient.h"
+
+// for clock and filename timestamps
+#include <LDateTime.h>
 
 // and SMS
 #include <LGSM.h>
@@ -38,8 +43,20 @@ int port = 80; // HTTP
 #include <LGPS.h>
 #include <math.h>
 
+// SD storage card
+#include <LSD.h>
+// filename for storing data
+char fn[80];
+// filename of startup logging commands
+char startup[] = "logging.cmd";
+
 // OBD2 library
 #include "OBD2.h"
+
+// for setting and getting the date time
+datetimeInfo t;
+// Globals for parseGPRMC to set
+int year, month, day, hour, minute, second;
 
 // For preparing the pubnub messages
 #include <ArduinoJson.h>
@@ -47,14 +64,14 @@ StaticJsonBuffer<200> jsonBuffer;
 JsonObject& root = jsonBuffer.createObject();
 JsonArray& latlng = root.createNestedArray("latlng");
 
-// leds for gprs status
-#define rled 12
-#define gled 11
+// leds for system status
+#define rled 3
+#define gled 2
 
 //define the required keys for using PubNub
-char pubkey[] = "pub-c-12345678-1234-1234-1234-yourpubkeyxx";
-char subkey[] = "sub-c-87654321-4321-4321-4321-yoursubkeyxx";
-char channel[] = "map1";
+char pubkey[] = "pub-c-a7e5745b-0ad1-42ac-8cce-229057b406ed";
+char subkey[] = "sub-c-4df1fc96-825f-11e5-8495-02ee2ddab7fe";
+char channel[] = "cardata";
 
 OBD2 obd2;
 
@@ -70,7 +87,7 @@ char NS;          // for gps quadrant, N(+)l S(-)latitude, E(+) W(-) longitude
 char EW;
 
 // for string json fix so EON map will work - it wants a LIST of json latlng cooridinates
-char pub[82];
+char pub[256];
 char rightbr[] = "]";
 char leftbr[] = "[";
 
@@ -109,8 +126,37 @@ void setup()
     PubNub.begin(pubkey, subkey);
     
     // Create initial json entry
-    latlng.add(double_with_n_digits(38.355577,6));
-    latlng.add(double_with_n_digits(-81.685728,6));    // create initial entry
+    latlng.add(double_with_n_digits(0.000000,6));
+    latlng.add(double_with_n_digits(0.000000,6));    // create initial entry
+
+    // sync up clock with gps
+    while ( year < 2015 )   // sanity check we actually sync'd up with gps, linkit one defaults to 2004
+   {
+     Serial.println("Getting date");
+     delay(1000);
+     LGPS.getData(&info);  
+     parseGPRMC((const char*)info.GPRMC);
+   }
+   
+   t.year = year;
+   t.mon = month;
+   t.day = day;
+   t.hour = hour;
+   t.min = minute;
+   t.sec = second;
+
+   Serial.println("Setting date");   
+   LDateTime.setTime(&t);
+
+   // prep sd card for logs - make sure the SPI/sdcard switch is in the 'sdcard' position
+   Serial.print("Initializing SD card...");
+   // make sure that the default chip select pin is set to
+   // output, even if you don't use it:
+   pinMode(10, OUTPUT);
+
+   // see if the card is present and can be initialized:
+   LSD.begin();
+   Serial.println("card initialized.");
 
 }
 
@@ -142,88 +188,145 @@ void loop()
     //Refresh Vehicle status, should be called in every loop
     obd2.Refresh();
     if(obd2.isIgnitionOn){
-      if (log_speed) vehicle_speed = obd2.Speed();
-      if (log_rpm) engine_rpm = obd2.RPM();
-      if (log_fuel) obd2.get_pid(FUEL_STATUS,&fuel_status);
-      if (log_load) obd2.get_pid(LOAD_VALUE,&engine_load);
-      if (log_coolant) obd2.get_pid(COOLANT_TEMP,&coolant_temp); 
-      if (log_stft_b1) obd2.get_pid(STFT_BANK1,&stft_b1);
-      if (log_ltft_b1) obd2.get_pid(LTFT_BANK1,&ltft_b1);
-      if (log_stft_b2) obd2.get_pid(STFT_BANK2,&stft_b2);
-      if (log_ltft_b2) obd2.get_pid(LTFT_BANK2,&ltft_b2);
-      if (log_timing_adv) obd2.get_pid(TIMING_ADV,&timing_adv);
-      if (log_int_air_temp) obd2.get_pid(INT_AIR_TEMP,&int_air_temp);
-      if (log_maf_air_flow) obd2.get_pid(MAF_AIR_FLOW,&maf_air_flow);
-      if (log_throttle_pos) obd2.get_pid(THROTTLE_POS,&throttle_pos);
-      if (log_b1s2_o2_v) obd2.get_pid(B1S2_O2_V,&b1s2_o2_v);
+      if (log_speed) 
+      {
+        vehicle_speed = obd2.Speed();
+        root["speed"] = vehicle_speed;
+      }
+      if (log_rpm)
+      {
+        engine_rpm = obd2.RPM();
+        root["rpm"] = engine_rpm;
+      }
+      if (log_fuel) 
+      {
+        obd2.get_pid(FUEL_STATUS,&fuel_status);
+        root["fuel"] = fuel_status;
+      }
+      if (log_load) 
+      {
+        obd2.get_pid(LOAD_VALUE,&engine_load);
+        root["load"] = engine_load;
+      }
+      if (log_coolant) 
+      {
+        obd2.get_pid(COOLANT_TEMP,&coolant_temp); 
+        root["coolant"] = coolant_temp;
+      }
+      if (log_stft_b1) 
+      {
+        obd2.get_pid(STFT_BANK1,&stft_b1);
+        root["stftb1"] = stft_b1;
+      }
+      if (log_ltft_b1) 
+      {
+        obd2.get_pid(LTFT_BANK1,&ltft_b1);
+        root["ltftb1"] = ltft_b1;
+      }
+      if (log_stft_b2) 
+      {
+        obd2.get_pid(STFT_BANK2,&stft_b2);
+        root["stftb2"] = stft_b2;
+      }
+      if (log_ltft_b2) 
+      {
+        obd2.get_pid(LTFT_BANK2,&ltft_b2);
+        root["ltftb2"] = ltft_b2;
+      }
+      if (log_timing_adv) 
+      {
+        obd2.get_pid(TIMING_ADV,&timing_adv);
+        root["timing"] = timing_adv;
+      }
+      if (log_int_air_temp) 
+      {
+        obd2.get_pid(INT_AIR_TEMP,&int_air_temp);
+        root["intairtemp"] = int_air_temp;
+      }
+      if (log_maf_air_flow) 
+      {
+        obd2.get_pid(MAF_AIR_FLOW,&maf_air_flow);
+        root["mafairflow"] = maf_air_flow;
+      }
+      if (log_throttle_pos) 
+      {
+        obd2.get_pid(THROTTLE_POS,&throttle_pos);
+        root["throttlepos"] = throttle_pos;
+      }
+      if (log_b1s2_o2_v) 
+      {
+        obd2.get_pid(B1S2_O2_V,&b1s2_o2_v);
+        root["b1s2o2v"] = b1s2_o2_v;
+      }
       obdError = false;
     } else {
       obdError = true;
     }
     
-    // get gps location info
-    LGPS.getData(&info);
-    parseGPGGA((const char*)info.GPGGA);
-    
-    Serial.println("Updating json");      // for Pubnub EON Mapbox map
     if(log_location)
     {
+      // get gps location info
+      Serial.println("Updating json");      // for Pubnub EON Mapbox map
+      LGPS.getData(&info);
+      parseGPGGA((const char*)info.GPGGA);
       latlng.set(0,double_with_n_digits(convertDegMinToDecDeg(latitude),6));      // get 6 digits precision!
       latlng.set(1,double_with_n_digits(convertDegMinToDecDeg(longitude),6));
     }
-    if (log_speed) root["speed"] = vehicle_speed;
-    if (log_rpm) root["rpm"] = engine_rpm;
-    if (log_fuel) root["fuel"] = fuel_status;
-    if (log_load) root["load"] = engine_load;
-    if (log_coolant) root["coolant"] = coolant_temp;
-    if (log_stft_b1) root["stftb1"] = stft_b1;
-    if (log_ltft_b1) root["ltftb1"] = ltft_b1;
-    if (log_stft_b2) root["stftb2"] = stft_b2;
-    if (log_ltft_b2) root["ltftb2"] = ltft_b2;
-    if (log_timing_adv) root["timing"] = timing_adv;
-    if (log_int_air_temp) root["intairtemp"] = int_air_temp;
-    if (log_maf_air_flow) root["mafairflow"] = maf_air_flow;
-    if (log_throttle_pos) root["throttlepos"] = throttle_pos;
-    if (log_b1s2_o2_v) root["b1s2o2v"] = b1s2_o2_v;
+    
     root.printTo(buff,80);
    
     strcpy(pub,leftbr);  // reset target string, put square brackets around json {...} so we have [{...}], EON wants a LIST
     strcat(pub,buff);
     strcat(pub,rightbr);
-    Serial.println("publishing a message");
-    Serial.println( pub );
-    client = PubNub.publish(channel, pub, 60);  // channel,message,timeout
-    if (!client) {
-        Serial.println("publishing error");
-        pubnubError = true;
-    } else {
-        pubnubError = false;
-        while (client->connected()) {
-          while (client->connected() && !client->available()); // wait
-          char c = client->read();
-          Serial.print(c);
-        }
-        client->stop();
-        Serial.println();
+    if (log_gprs) {
+      Serial.println("publishing a message");
+      Serial.println( pub );
+      client = PubNub.publish(channel, pub, 60);  // channel,message,timeout
+      if (!client) {
+          Serial.println("publishing error");
+          pubnubError = true;
+      } else {
+          pubnubError = false;
+          while (client->connected()) {
+            while (client->connected() && !client->available()); // wait
+            char c = client->read();
+            Serial.print(c);
+          }
+          client->stop();
+          Serial.println();
+      }
+      
+      // publish to Adafruit IO - this is a fixed format of what to log, if not logged just gets zeros
+      if (client->connect(server, port))
+      {
+        Serial.println("connected to adafruit");
+        // Make a HTTP request:
+        snprintf(buff,255,"GET %s%li&CoolantTemp=%li&Location=%.6f,%.6f HTTP/1.1",path,engine_load,coolant_temp,convertDegMinToDecDeg(latitude),convertDegMinToDecDeg(longitude));
+        client->println(buff);
+        client->print("Host: ");
+        client->println(server);
+        client->println("Connection: close");
+        client->println();
+        gprsError = false;
+      }
+      else
+      {
+        // if you didn't get a connection to the server:
+        Serial.println("Adafruit connection failed");
+        gprsError = true;
+      }
+    }     // don't want else clause here, can log BOTH gprs and sdcard
+    
+    if (log_sdcard)
+    {
+      // log to sd card - filename fn was set when log sdcard started
+      LFile dataFile = LSD.open(fn, FILE_WRITE);
+      dataFile.println(pub);
+      dataFile.close();
+      Serial.println("Logged to sdcard");
+      Serial.println(pub);
     }
    
-    // publish to Adafruit IO
-    if (client->connect(server, port))
-    {
-      Serial.println("connected");
-      // Make a HTTP request:
-      snprintf(buff,255,"GET %s%li&CoolantTemp=%li&Location=%.6f,%.6f HTTP/1.1",path,engine_load,coolant_temp,convertDegMinToDecDeg(latitude),convertDegMinToDecDeg(longitude));
-      client->println(buff);
-      client->print("Host: ");
-      client->println(server);
-      client->println("Connection: close");
-      client->println();
-    }
-    else
-    {
-      // if you didn't get a connection to the server:
-      Serial.println("Adafruit connection failed");
-    }
    
     if ( gpsError | gprsError | obdError | pubnubError ) 
     {
@@ -241,6 +344,8 @@ void loop()
     
 }  // END loop()
 
+
+
 // some handy led functions
 static void redledon(void) {
   digitalWrite(rled, HIGH);
@@ -252,209 +357,4 @@ static void greenledon(void) {
   digitalWrite(gled, HIGH);
 }
 
-// GPS Functions
 
-// converts lat/long from degree-minute format to decimal-degrees
-static double convertDegMinToDecDeg (double degMin) {
-  double min = 0.0;
-  double decDeg = 0.0;
- 
-  //get the minutes, fmod() requires double
-  min = fmod((double)degMin, 100.0);
- 
-  //rebuild coordinates in decimal degrees
-  degMin = (int) ( degMin / 100 );
-  decDeg = degMin + ( min / 60 );
- 
-  return decDeg;
-}
-
-static unsigned char getComma(unsigned char num,const char *str)
-{
-  unsigned char i,j = 0;
-  int len=strlen(str);
-  for(i = 0;i < len;i ++)
-  {
-     if(str[i] == ',')
-      j++;
-     if(j == num)
-      return i + 1; 
-  }
-  return 0; 
-}
-
-static double getDoubleNumber(const char *s)
-{
-  char buf[10];
-  unsigned char i;
-  double rev;
-  
-  i=getComma(1, s);
-  i = i - 1;
-  strncpy(buf, s, i);
-  buf[i] = 0;
-  rev=atof(buf);
-  return rev; 
-}
-
-static double getIntNumber(const char *s)
-{
-  char buf[10];
-  unsigned char i;
-  double rev;
-  
-  i=getComma(1, s);
-  i = i - 1;
-  strncpy(buf, s, i);
-  buf[i] = 0;
-  rev=atoi(buf);
-  return rev; 
-}
-
-void parseGPGGA(const char* GPGGAstr)
-{
-  /* Refer to http://www.gpsinformation.org/dale/nmea.htm#GGA
-   * Sample data: $GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47
-   * Where:
-   *  GGA          Global Positioning System Fix Data
-   *  123519       Fix taken at 12:35:19 UTC
-   *  4807.038,N   Latitude 48 deg 07.038' N
-   *  01131.000,E  Longitude 11 deg 31.000' E
-   *  1            Fix quality: 0 = invalid
-   *                            1 = GPS fix (SPS)
-   *                            2 = DGPS fix
-   *                            3 = PPS fix
-   *                            4 = Real Time Kinematic
-   *                            5 = Float RTK
-   *                            6 = estimated (dead reckoning) (2.3 feature)
-   *                            7 = Manual input mode
-   *                            8 = Simulation mode
-   *  08           Number of satellites being tracked
-   *  0.9          Horizontal dilution of position
-   *  545.4,M      Altitude, Meters, above mean sea level
-   *  46.9,M       Height of geoid (mean sea level) above WGS84
-   *                   ellipsoid
-   *  (empty field) time in seconds since last DGPS update
-   *  (empty field) DGPS station ID number
-   *  *47          the checksum data, always begins with *
-   */
- 
-  int tmp, hour, minute, second, num ;
-  if(GPGGAstr[0] == '$')
-  {
-    tmp = getComma(1, GPGGAstr);
-    hour     = (GPGGAstr[tmp + 0] - '0') * 10 + (GPGGAstr[tmp + 1] - '0');
-    minute   = (GPGGAstr[tmp + 2] - '0') * 10 + (GPGGAstr[tmp + 3] - '0');
-    second    = (GPGGAstr[tmp + 4] - '0') * 10 + (GPGGAstr[tmp + 5] - '0');
-
-//    sprintf(buff, "UTC timer %2d-%2d-%2d", hour, minute, second);
-//    Serial.println(buff);
-
-    tmp = getComma(2, GPGGAstr);
-    latitude = getDoubleNumber(&GPGGAstr[tmp]);
-    tmp = getComma(3, GPGGAstr);
-    NS = GPGGAstr[tmp];
-    tmp = getComma(4, GPGGAstr);
-    longitude = getDoubleNumber(&GPGGAstr[tmp]);
-    tmp = getComma(5, GPGGAstr);
-    EW = GPGGAstr[tmp];
-    
-    if (NS == 'S') latitude = -latitude;
-    if (EW == 'W') longitude = -longitude;
-
-//    sprintf(buff, "latitude = %10.4f, longitude = %10.4f", latitude, longitude);
-//    Serial.println(buff);    
-    
-    tmp = getComma(7, GPGGAstr);
-    num = getIntNumber(&GPGGAstr[tmp]);    
-
-//    sprintf(buff, "satellites number = %d", num);
-//    Serial.println(buff); 
-    gpsError = false;
-  }
-  else
-  {
-    Serial.println("Did not get GPS data"); 
-    gpsError = true;
-  }
-}
-
-static void checkSMS()  // for text queries
-{
-    if(LSMS.available()) // Check if there is new SMS
-    {
-      
-      char smsin[140];  // buffer for the text messages
-      char cmd1[10];    // first token of sms command parsed
-      char cmd2[10];    // second token of sms command parse
-      char s[2] = " ";	// space seperated commands
-      char buf[20];    // for sms sender number
-
-      int v;
-      int stri = 0;
-      char smsreply[140];
-      long int pidquery = 0;
-
-      Serial.println("There is new message.");
-      LSMS.remoteNumber(buf, 20); // display Number part
-      Serial.print("Number:");
-      Serial.println(buf);
-      Serial.print("Content:"); // display Content part
-
-      while(true)
-      {
-        v = LSMS.read();
-        if(v < 0) {            // -1 end of message
-          smsin[stri] = '\0';  // end of message, null terminate incoming message at index
-          break;
-        } else
-          smsin[stri++] = (char)v;  // save the char in buffer and then increment index
-      }
-      LSMS.flush(); // delete message
-      
-      // tokenize the first two space seperated words in the message, there can be more than two, rest ignored
-      strcpy(cmd1,strtok(smsin,s));
-      strcpy(cmd2,strtok(NULL,s));    // FIXME if only one token, this is garbage!
-      
-      if (strcmp(cmd1,"get") == 0 | strcmp(cmd1,"Get") == 0) {
-        if ( strcmp(cmd2,"mil") == 0 | strcmp(cmd2,"Mil") == 0 | strcmp(cmd2,"cel") == 0 | strcmp(cmd2,"Cel") == 0 ) {
-          Serial.println("got request for mil code");
-          if(obd2.isIgnitionOn){
-            obd2.get_pid(MIL_CODE,&pidquery);
-            // here we can check and use and intelligently respond according to the bit codes in L1_obd2.h
-            ltoa(pidquery,smsreply,10);    // write long base 10 to smsreply buffer
-            if ( (pidquery>>MIL)&1 == 1 ) // Check Engine light is on
-            {
-              strcat(smsreply," Check Engine Light is on");
-            }
-            if ( (pidquery>>CAT_AVAIL)&1 == 1 ) // catalyst test available, for example
-            {
-              strcat(smsreply," Catalyst test available");
-            }
-          } else {
-            strcpy(smsreply,"OBD reports ignition off");
-          }
-          LSMS.beginSMS(buf);                // reply to sending number
-          LSMS.print(smsreply);
-          if(LSMS.endSMS()) Serial.println("mil reply message sent");
-        } else if ( strcmp(cmd2,"coolant") == 0 | strcmp(cmd2,"Coolant") == 0 ) {
-          Serial.println("got request for coolant temp");
-          if(obd2.isIgnitionOn){
-            obd2.get_pid(COOLANT_TEMP,&pidquery);
-            ltoa(pidquery,smsreply,10);
-            strcat(smsreply," deg c");
-          } else {
-            strcpy(smsreply,"OBD reports ignition off");
-          }
-          LSMS.beginSMS(buf);
-          LSMS.print(smsreply);
-          if(LSMS.endSMS()) Serial.println("coolant temp reply message sent");
-        }
-        // need setion to get DTC_CNT, count of diagnostic trouble codes
-        // need section to get DTC, mode 3 
-        // https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_3_.28no_PID_required.29
-      }
-            
-    }  // END if sms
-}    
-    
