@@ -25,7 +25,7 @@
 
 // Adafruit io support
 char server[] =  "io.adafruit.com";
-char path[] = "/api/groups/AutoStats/send.json?x-aio-key=a0c04c4efd0c605e93ef1e2ed2be85de1095f140&Load=";
+char path[] = "/api/groups/AutoStats/send.json?x-aio-key=xxxxyourxaioxkeyxherexxxxxxxxxxxxxxxxxxx&Load=";
 int port = 80; // HTTP
 
 //import all the necessary files for GPRS connectivity
@@ -69,8 +69,8 @@ JsonArray& latlng = root.createNestedArray("latlng");
 #define gled 2
 
 //define the required keys for using PubNub
-char pubkey[] = "pub-c-a7e5745b-0ad1-42ac-8cce-229057b406ed";
-char subkey[] = "sub-c-4df1fc96-825f-11e5-8495-02ee2ddab7fe";
+char pubkey[] = "pub-c-a7e5745b-0ad1-42ac-8cce-xxxyourxpubxkeyxhere";
+char subkey[] = "sub-c-4df1fc96-825f-11e5-8495-xxxyourxsubxkeyxhere";
 char channel[] = "cardata";
 
 OBD2 obd2;
