@@ -6,7 +6,6 @@ static void checkSMS(void)  // for text queries
     {
       
       char smsin[140];  // buffer for the text messages
-      // for tokens
       int v;
       int stri = 0;
 
