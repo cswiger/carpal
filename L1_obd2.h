@@ -5,7 +5,9 @@ static unsigned char getComma(unsigned char num,const char *str);
 static double getDoubleNumber(const char *s);
 static double getIntNumber(const char *s);
 void parseGPGGA(const char* GPGGAstr);
+void parseGPRMC(const char* GPRMCstr);
 static void checkSMS(void);
+void parseCMDS(char (&commands)[140]);
 
 /* MIL_CODE bit value meanings, from https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_01
    My Avalon returns 484608 or 00000000 00000111 01100101 00000000
@@ -42,13 +44,13 @@ static void checkSMS(void);
 #define CAT_INCOMPL 0     // Catalyst test incomplete, D0
 
 // various items to log
-bool logging = true;    // to log or not to log, that is the flag
-bool log_gprs = true;   // where to log, over the radio
+bool logging = false;    // to log or not to log, that is the flag - is this needed? if either log_gprs or log_sdcard is set should suffice
+bool log_gprs = false;   // where to log, over the radio
 bool log_sdcard = false;  // or to local storage
-bool log_location = true;  // gps coordinates
+bool log_location = false;  // gps coordinates
 bool log_fuel = false;    // fuel system status pid 0x03
-bool log_load = true;    // engine load pid 0x04
-bool log_coolant = true;  // coolant temp pid 0x05
+bool log_load = false;    // engine load pid 0x04
+bool log_coolant = false;  // coolant temp pid 0x05
 bool log_stft_b1 = false;   // short term fuel trim bank 1 pid 0x06  -- these are as yet unprocessed in obd2 library, just raw A value
 bool log_ltft_b1 = false;   // long term fuel trim bank 1 pid 0x07   -- should be (A-128) * 100/128,  -100 to 99.22
 bool log_stft_b2 = false;   // short term fuel trim bank 2 pid 0x08
@@ -60,4 +62,3 @@ bool log_int_air_temp = false; // intake air temp pid 0x0F
 bool log_maf_air_flow = false;  // MAF air flow rate pid 0x10
 bool log_throttle_pos = false;  // throttle position
 bool log_b1s2_o2_v = false;     // bank 1, sensor 2: oxygen sensor voltage, short term fuel trim
-
