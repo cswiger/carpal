@@ -120,7 +120,7 @@ void parseGPGGA(const char* GPGGAstr)
   }
   else
   {
-    Serial.println("Did not get GPS data"); 
+    Serial.println(F("Did not get GPS data")); 
     gpsError = true;
   }
 }
@@ -171,8 +171,7 @@ void parseGPRMC(const char* GPRMCstr)
   }
   else
   {
-    Serial.println("Not get data"); 
+    Serial.println(F("Not get data")); 
   }
 }
-
 
