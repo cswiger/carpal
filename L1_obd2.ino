@@ -1,6 +1,9 @@
 /*
   CarPal! Your automobile's OBD2 dashboard buddy. 
 
+  v5d - do some memory conserving 
+  v5c - further factor parse sms into major commands 'get' and 'log' handled in different functions
+  v5b - factor sms into get sms and parse
   v5a - cleanup and debug sms logging commands
   v5 - moved gps functions to it's own tab, added sd card support
   v4 - moved checkSMS to it's own tab for expanding sms command parsing, added the logging bool switches that can be turned
@@ -24,8 +27,8 @@
 #include "PubNub.h"
 
 // Adafruit io support
-char server[] =  "io.adafruit.com";
-char path[] = "/api/groups/AutoStats/send.json?x-aio-key=xxxxyourxaioxkeyxherexxxxxxxxxxxxxxxxxxx&Load=";
+const char server[] PROGMEM =  "io.adafruit.com";
+char path[] PROGMEM = "/api/groups/AutoStats/send.json?x-aio-key=a0c04c4efd0c605e93ef1e2ed2be85de1095f140&Load=";
 int port = 80; // HTTP
 
 //import all the necessary files for GPRS connectivity
@@ -69,9 +72,9 @@ JsonArray& latlng = root.createNestedArray("latlng");
 #define gled 2
 
 //define the required keys for using PubNub
-char pubkey[] = "pub-c-12345678-1234-1234-1234-xxxyourxpubxkeyxhere";
-char subkey[] = "sub-c-87654321-4321-4321-4321-xxxyourxsubxkeyxhere";
-char channel[] = "cardata";
+const char pubkey[] PROGMEM = "pub-c-a7e5745b-0ad1-42ac-8cce-229057b406ed";
+const char subkey[] PROGMEM = "sub-c-4df1fc96-825f-11e5-8495-02ee2ddab7fe";
+const char channel[] PROGMEM = "cardata";
 
 OBD2 obd2;
 
@@ -113,7 +116,7 @@ void setup()
     obd2.Init(&Serial1);  // this runs obd2.check_supported_pids() before returning
     
     //Connect to the GRPS network in order to send/receive PubNub messages    
-    while (!LGPRS.attachGPRS("yourCellAPN",NULL,NULL))
+    while (!LGPRS.attachGPRS("att.mvno",NULL,NULL))
     {
         delay(1000);
     }
@@ -132,7 +135,7 @@ void setup()
     // sync up clock with gps
     while ( year < 2015 )   // sanity check we actually sync'd up with gps, linkit one defaults to 2004
    {
-     Serial.println("Getting date");
+     Serial.println(F("Getting date"));
      delay(1000);
      LGPS.getData(&info);  
      parseGPRMC((const char*)info.GPRMC);
@@ -145,18 +148,18 @@ void setup()
    t.min = minute;
    t.sec = second;
 
-   Serial.println("Setting date");   
+   Serial.println(F("Setting date"));   
    LDateTime.setTime(&t);
 
    // prep sd card for logs - make sure the SPI/sdcard switch is in the 'sdcard' position
-   Serial.print("Initializing SD card...");
+   Serial.print(F("Initializing SD card..."));
    // make sure that the default chip select pin is set to
    // output, even if you don't use it:
    pinMode(10, OUTPUT);
 
    // see if the card is present and can be initialized:
    LSD.begin();
-   Serial.println("card initialized.");
+   Serial.println(F("card initialized."));
 
 }
 
@@ -266,7 +269,7 @@ void loop()
     if(log_location)
     {
       // get gps location info
-      Serial.println("Updating json");      // for Pubnub EON Mapbox map
+      Serial.println(F("Updating json"));      // for Pubnub EON Mapbox map
       LGPS.getData(&info);
       parseGPGGA((const char*)info.GPGGA);
       latlng.set(0,double_with_n_digits(convertDegMinToDecDeg(latitude),6));      // get 6 digits precision!
@@ -279,11 +282,11 @@ void loop()
     strcat(pub,buff);
     strcat(pub,rightbr);
     if (log_gprs) {
-      Serial.println("publishing a message");
+      Serial.println(F("publishing a message"));
       Serial.println( pub );
       client = PubNub.publish(channel, pub, 60);  // channel,message,timeout
       if (!client) {
-          Serial.println("publishing error");
+          Serial.println(F("publishing error"));
           pubnubError = true;
       } else {
           pubnubError = false;
@@ -299,7 +302,7 @@ void loop()
       // publish to Adafruit IO - this is a fixed format of what to log, if not logged just gets zeros
       if (client->connect(server, port))
       {
-        Serial.println("connected to adafruit");
+        Serial.println(F("connected to adafruit"));
         // Make a HTTP request:
         snprintf(buff,255,"GET %s%li&CoolantTemp=%li&Location=%.6f,%.6f HTTP/1.1",path,engine_load,coolant_temp,convertDegMinToDecDeg(latitude),convertDegMinToDecDeg(longitude));
         client->println(buff);
@@ -312,7 +315,7 @@ void loop()
       else
       {
         // if you didn't get a connection to the server:
-        Serial.println("Adafruit connection failed");
+        Serial.println(F("Adafruit connection failed"));
         gprsError = true;
       }
     }     // don't want else clause here, can log BOTH gprs and sdcard
@@ -356,5 +359,4 @@ static void greenledon(void) {
   digitalWrite(rled, LOW);
   digitalWrite(gled, HIGH);
 }
-
 
