@@ -8,6 +8,9 @@ void parseGPGGA(const char* GPGGAstr);
 void parseGPRMC(const char* GPRMCstr);
 static void checkSMS(void);
 void parseCMDS(char (&commands)[140]);
+void parseGET(char (&gcmds)[10][10], int ti);
+void parseLOG(char (&lcmds)[10][10], int ti);
+
 
 /* MIL_CODE bit value meanings, from https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_01
    My Avalon returns 484608 or 00000000 00000111 01100101 00000000
