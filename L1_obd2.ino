@@ -72,8 +72,8 @@ JsonArray& latlng = root.createNestedArray("latlng");
 #define gled 2
 
 //define the required keys for using PubNub
-const char pubkey[] PROGMEM = "pub-c-a7e5745b-0ad1-42ac-8cce-xxxxxxxxxxxx";
-const char subkey[] PROGMEM = "sub-c-4df1fc96-825f-11e5-8495-xxxxxxxxxxxx";
+const char pubkey[] PROGMEM = "pub-c-a7e5745b-0ad1-1234-1234-xyourxpubxxx";
+const char subkey[] PROGMEM = "sub-c-4df1fc96-825f-4321-4321-xyourxsubxxx";
 const char channel[] PROGMEM = "cardata";
 
 OBD2 obd2;
@@ -116,7 +116,7 @@ void setup()
     obd2.Init(&Serial1);  // this runs obd2.check_supported_pids() before returning
     
     //Connect to the GRPS network in order to send/receive PubNub messages    
-    while (!LGPRS.attachGPRS("att.mvno",NULL,NULL))
+    while (!LGPRS.attachGPRS("yourCellAPN",NULL,NULL))
     {
         delay(1000);
     }
