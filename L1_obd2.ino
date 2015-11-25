@@ -72,8 +72,8 @@ JsonArray& latlng = root.createNestedArray("latlng");
 #define gled 2
 
 //define the required keys for using PubNub
-const char pubkey[] PROGMEM = "pub-c-a7e5745b-0ad1-42ac-8cce-229057b406ed";
-const char subkey[] PROGMEM = "sub-c-4df1fc96-825f-11e5-8495-02ee2ddab7fe";
+const char pubkey[] PROGMEM = "pub-c-a7e5745b-0ad1-42ac-8cce-xxxxxxxxxxxx";
+const char subkey[] PROGMEM = "sub-c-4df1fc96-825f-11e5-8495-xxxxxxxxxxxx";
 const char channel[] PROGMEM = "cardata";
 
 OBD2 obd2;
