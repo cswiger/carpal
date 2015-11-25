@@ -32,7 +32,7 @@
 var pubnub = PUBNUB({ subscribe_key: 'sub-c-87654321-4321-4321-4321-yoursubkeyxx', ssl: true });
 var channel = 'map1';
 
-eon.map({
+var map eon.map({
 pubnub: pubnub,
 id: 'map',
 mb_token: 'pk.ey_put_your_mapbox_key_here_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
@@ -40,6 +40,9 @@ mb_id: 'yourmapid.wif9s7f8',
 channel: channel,
 options: {
           zoomAnimation: false,
+        },
+        message: function(data) {
+          map.setView(data[0],latlng,13);
         },
         marker: function (latlng, data) {
 
