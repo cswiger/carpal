@@ -28,7 +28,7 @@
 
 // Adafruit io support
 const char server[] PROGMEM =  "io.adafruit.com";
-char path[] PROGMEM = "/api/groups/AutoStats/send.json?x-aio-key=a0c04c4efd0c605e93ef1e2ed2be85de1095f140&Load=";
+char path[] PROGMEM = "/api/groups/AutoStats/send.json?x-aio-key=xxxxyourxadafruitxkeyxherexxxxxxx&Load=";
 int port = 80; // HTTP
 
 //import all the necessary files for GPRS connectivity
