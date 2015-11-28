@@ -16,7 +16,7 @@
         width:100%;
       }
     </style>
-    <!-- you must have eon-maps and subsub installed and available for these -->
+
     <link href="../lib/mapbox.css" rel="stylesheet" />
     <script src="../../subsub/subsub.js"></script>
     <script src="../lib/mapbox.js"></script>
@@ -29,26 +29,26 @@
     <div id='map'></div>
 
          <script>
-var pubnub = PUBNUB({ subscribe_key: 'sub-c-87654321-4321-4321-4321-yoursubkeyxx', ssl: true });
-var channel = 'map1';
+var pubnub = PUBNUB({ subscribe_key: 'sub-c-12345678-1234-1234-1234-xyoursubkeyx', ssl: true });
+var channel = 'cardata';
 
-var map eon.map({
+var map = eon.map({
 pubnub: pubnub,
 id: 'map',
-mb_token: 'pk.ey_put_your_mapbox_key_here_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-mb_id: 'yourmapid.wif9s7f8',
+mb_token: 'pk.eyxxyourxmapboxxtokenxherexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+mb_id: 'cswiger.o3oich80',
 channel: channel,
 options: {
           zoomAnimation: false,
         },
         message: function(data) {
-          map.setView(data[0],latlng,13);
+          map.setView(data[0].latlng,13);
         },
         marker: function (latlng, data) {
 
             var marker = new L.Marker(latlng, {
                 icon: L.icon({
-                    iconUrl: 'https://d30y9cdsu7xlg0.cloudfront.net/png/15274-200.png',
+                    iconUrl: 'http://swigerco.com/car_icon.png',
                     iconSize: [24, 24]
                 })
             });
