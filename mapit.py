@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# easy python script to convert a CarPal log file from json to csv to csv for uploading to MapBox
+# easy python script to convert a CarPal log file from json to csv for uploading to MapBox
 # looks for 'latlng' position and currently 'speed' in the json - MapBox allows 1 label per marker
 
 import sys
