@@ -1,7 +1,9 @@
 /*
   CarPal! Your automobile's OBD2 dashboard buddy. 
 
-  v5d - do some memory conserving 
+  v5f - fixing status light to ignore modules not in use
+  v5e - adding startup command file
+  v5d - Start trying to conserv ram, use const char PROGMEM and F(...) 
   v5c - further factor parse sms into major commands 'get' and 'log' handled in different functions
   v5b - factor sms into get sms and parse
   v5a - cleanup and debug sms logging commands
@@ -28,7 +30,7 @@
 
 // Adafruit io support
 const char server[] PROGMEM =  "io.adafruit.com";
-char path[] PROGMEM = "/api/groups/AutoStats/send.json?x-aio-key=xxxxyourxadafruitxkeyxherexxxxxxx&Load=";
+char path[] PROGMEM = "/api/groups/AutoStats/send.json?x-aio-key=xxxxyourxxaioxkeyxherexxxxxxxxxxxxxx&Load=";
 int port = 80; // HTTP
 
 //import all the necessary files for GPRS connectivity
@@ -51,7 +53,7 @@ int port = 80; // HTTP
 // filename for storing data
 char fn[80];
 // filename of startup logging commands
-char startup[] = "logging.cmd";
+char startup[] PROGMEM = "commands.txt";
 
 // OBD2 library
 #include "OBD2.h"
@@ -72,8 +74,8 @@ JsonArray& latlng = root.createNestedArray("latlng");
 #define gled 2
 
 //define the required keys for using PubNub
-const char pubkey[] PROGMEM = "pub-c-a7e5745b-0ad1-1234-1234-xyourxpubxxx";
-const char subkey[] PROGMEM = "sub-c-4df1fc96-825f-4321-4321-xyourxsubxxx";
+const char pubkey[] PROGMEM = "pub-c-12345678-1234-1234-1234-xyourpubkeyx";
+const char subkey[] PROGMEM = "sub-c-87654321-4321-4321-4321-xyoursubkeyx";
 const char channel[] PROGMEM = "cardata";
 
 OBD2 obd2;
@@ -99,6 +101,7 @@ boolean gprsError = true;
 boolean gpsError = true;
 boolean obdError = true;
 boolean pubnubError = true;
+boolean sdcardError = true;
 
 void setup()
 {
@@ -116,7 +119,7 @@ void setup()
     obd2.Init(&Serial1);  // this runs obd2.check_supported_pids() before returning
     
     //Connect to the GRPS network in order to send/receive PubNub messages    
-    while (!LGPRS.attachGPRS("yourCellAPN",NULL,NULL))
+    while (!LGPRS.attachGPRS("YourCellAPN",NULL,NULL))
     {
         delay(1000);
     }
@@ -160,7 +163,24 @@ void setup()
    // see if the card is present and can be initialized:
    LSD.begin();
    Serial.println(F("card initialized."));
+   sdcardError = false;
 
+   // check sdcard for startup logging command
+   LFile dataFile = LSD.open(startup,FILE_READ);  // http://labs.mediatek.com/site/global/developer_tools/mediatek_linkit/api_references/LDrive__open@char__@uint8_t.gsp
+   if(dataFile) {               // dataFile returns something that evaluates to 'false' if not successfully opened
+     Serial.println("Datafile Opened, reading contents");
+     char scmds[140];      // read startup commands
+     int r = dataFile.read(scmds,140);     // http://labs.mediatek.com/site/global/developer_tools/mediatek_linkit/api_references/LFile__read@void__@uint16_t.gsp
+     dataFile.close();
+     scmds[r++] = '\0';
+     parseCMDS(scmds);
+     sdcardError = false;
+   } else 
+   {
+     Serial.print(F("Error opening "));
+     Serial.println(startup);
+     sdcardError = true;
+   }
 }
 
 int interval = 15000;  // millis per sample
@@ -327,11 +347,11 @@ void loop()
       dataFile.println(pub);
       dataFile.close();
       Serial.println("Logged to sdcard");
-      Serial.println(pub);
+      Serial.println(pub);    // needs test for success or not
     }
    
    
-    if ( gpsError | gprsError | obdError | pubnubError ) 
+    if ( gpsError | ( log_gprs & ( pubnubError | gprsError )) | ( log_sdcard & sdcardError ) | obdError ) 
     {
       redledon();
     } else {
