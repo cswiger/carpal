@@ -1,6 +1,7 @@
 /*
   CarPal! Your automobile's OBD2 dashboard buddy. 
-
+  
+  v5g - fixed last issue with sdcard filename, was getting 2080 for year about 12 seconds before actual gps lock on satellite
   v5f - fixing status light to ignore modules not in use
   v5e - adding startup command file
   v5d - Start trying to conserv ram, use const char PROGMEM and F(...) 
@@ -136,8 +137,8 @@ void setup()
     latlng.add(double_with_n_digits(0.000000,6));    // create initial entry
 
     // sync up clock with gps
-    while ( year < 2015 )   // sanity check we actually sync'd up with gps, linkit one defaults to 2004
-   {
+    while ( year < 2015 | year > 2030 )   // sanity check we actually sync'd up with gps, linkit one defaults to 2004
+   {                                      // and gps returns 2080 before lock!   Mine takes about 12 seconds to lock on satellite
      Serial.println(F("Getting date"));
      delay(1000);
      LGPS.getData(&info);  
